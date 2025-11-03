@@ -1,5 +1,5 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import os
 from datetime import datetime
 import json
@@ -18,6 +18,8 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = ""
 if "model" not in st.session_state:
     st.session_state.model = "gpt-3.5-turbo"
+if "client" not in st.session_state:
+    st.session_state.client = None
 
 # Sidebar for configuration
 with st.sidebar:
@@ -33,7 +35,8 @@ with st.sidebar:
     
     if api_key:
         st.session_state.api_key = api_key
-        openai.api_key = api_key
+        # Initialize OpenAI client with the API key
+        st.session_state.client = OpenAI(api_key=api_key)
     
     # Model selection
     model = st.selectbox(
@@ -86,21 +89,26 @@ with chat_container:
 # Function to get AI response
 def get_ai_response(messages, model="gpt-3.5-turbo"):
     try:
-        response = openai.chat.completions.create(
+        if st.session_state.client is None:
+            return "❌ Error: Please enter your OpenAI API key in the sidebar."
+        
+        response = st.session_state.client.chat.completions.create(
             model=model,
             messages=messages,
             temperature=0.7,
             max_tokens=500
         )
         return response.choices[0].message.content
-    except openai.AuthenticationError:
-        return "❌ Error: Invalid API key. Please check your API key in the sidebar."
-    except openai.RateLimitError:
-        return "❌ Error: Rate limit exceeded. Please try again later."
-    except openai.APIConnectionError:
-        return "❌ Error: Connection error. Please check your internet connection."
     except Exception as e:
-        return f"❌ Error: {str(e)}"
+        error_message = str(e)
+        if "authentication" in error_message.lower():
+            return "❌ Error: Invalid API key. Please check your API key in the sidebar."
+        elif "rate limit" in error_message.lower():
+            return "❌ Error: Rate limit exceeded. Please try again later."
+        elif "connection" in error_message.lower():
+            return "❌ Error: Connection error. Please check your internet connection."
+        else:
+            return f"❌ Error: {error_message}"
 
 # Chat input
 if prompt := st.chat_input("Type your message here..."):
